@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "causalfe"
+version = "0.1.0"
+description = "Causal Forests with Fixed Effects for Panel and Difference-in-Differences Settings"
+authors = [
+    { name = "Harry Aytug", email = "haytug@gmail.com" }
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = [
+    "causal inference",
+    "causal forest",
+    "fixed effects",
+    "difference-in-differences",
+    "heterogeneous treatment effects",
+    "panel data",
+    "econometrics"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+dependencies = [
+    "numpy>=1.20",
+    "scipy>=1.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "black",
+    "ruff",
+]
+compare = [
+    "econml>=0.14",
+    "scikit-learn>=1.0",
+]
+all = [
+    "causalfe[dev,compare]",
+    "matplotlib>=3.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/haytug/causalfe"
+Documentation = "https://github.com/haytug/causalfe#readme"
+Repository = "https://github.com/haytug/causalfe"
+Issues = "https://github.com/haytug/causalfe/issues"
+"Original Paper" = "https://www.cpb.nl/en/publication/causal-forests-with-fixed-effects-for-treatment-effect-heterogeneity-in-difference-in-differences"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["causalfe*"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 88
+target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
