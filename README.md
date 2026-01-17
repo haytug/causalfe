@@ -151,7 +151,19 @@ See [docs/methods.md](docs/methods.md) for full methodology.
 
 ## Citation
 
-If you use this package in your research, please cite the original CFFE paper:
+If you use this package in your research, please cite:
+
+```bibtex
+@article{aytug2026causalfe,
+  title={causalfe: Causal Forests with Fixed Effects in Python},
+  author={Aytug, Harry},
+  journal={arXiv preprint arXiv:2601.10555},
+  year={2026},
+  doi={10.48550/arXiv.2601.10555}
+}
+```
+
+The CFFE methodology was originally developed by Kattenberg, Scheer, and Thiel (2023):
 
 ```bibtex
 @article{kattenberg2023causal,
@@ -163,14 +175,14 @@ If you use this package in your research, please cite the original CFFE paper:
 }
 ```
 
-And optionally this Python implementation:
+Alternatively, to cite the software directly:
 
 ```bibtex
 @software{causalfe,
-  title = {causalfe: Causal Forests with Fixed Effects in Python},
-  author = {Aytug, Harry},
-  year = {2026},
-  url = {https://github.com/haytug/causalfe}
+  title={causalfe: Causal Forests with Fixed Effects in Python},
+  author={Aytug, Harry},
+  year={2026},
+  url={https://github.com/haytug/causalfe}
 }
 ```
 

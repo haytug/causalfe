@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "causalfe"
-version = "0.1.0"
+version = "0.1.1"
 description = "Causal Forests with Fixed Effects for Panel and Difference-in-Differences Settings"
 authors = [
     { name = "Harry Aytug", email = "haytug@gmail.com" }
