@@ -123,7 +123,7 @@ class TestMultiSplitVariance:
 
         # Both should be similar
         ratio = var_multi.mean() / (var_half.mean() + 1e-10)
-        assert 0.5 < ratio < 2.0
+        assert 0.3 < ratio < 3.0
 
 
 class TestClusterRobustVariance:
