@@ -182,7 +182,7 @@ If you use this package in your research, please cite:
   title={causalfe: Causal Forests with Fixed Effects in Python},
   author={Aytug, Harry},
   journal={arXiv preprint arXiv:2601.10555},
-  year={2025},
+  year={2026},
   doi={10.48550/arXiv.2601.10555}
 }
 ```
@@ -205,7 +205,7 @@ Alternatively, to cite the software directly:
 @software{causalfe,
   title={causalfe: Causal Forests with Fixed Effects in Python},
   author={Aytug, Harry},
-  year={2025},
+  year={2026},
   url={https://github.com/haytug/causalfe}
 }
 ```
