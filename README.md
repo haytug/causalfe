@@ -178,7 +178,7 @@ See [docs/methods.md](docs/methods.md) for full methodology.
 If you use this package in your research, please cite:
 
 ```bibtex
-@article{aytug2025causalfe,
+@article{aytug2026causalfe,
   title={causalfe: Causal Forests with Fixed Effects in Python},
   author={Aytug, Harry},
   journal={arXiv preprint arXiv:2601.10555},
