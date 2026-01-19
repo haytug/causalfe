@@ -125,6 +125,30 @@ CFFEForest(
 - `predict(X)`: Predict CATEs
 - `predict_with_variance(X, method="half_sample")`: Predict with variance
 - `predict_interval(X, alpha=0.05)`: Predict with confidence intervals
+- `get_params(deep=True)`: Get estimator parameters (scikit-learn compatible)
+- `set_params(**params)`: Set estimator parameters (scikit-learn compatible)
+- `score(X, Y, D, unit, time, tau_true=None)`: R² score for CATE predictions
+- `clone()`: Create an unfitted copy with same parameters
+
+**Scikit-learn Compatibility:**
+
+The `CFFEForest` class follows scikit-learn conventions:
+
+```python
+# Informative string representation
+>>> forest = CFFEForest(n_trees=100, max_depth=4)
+>>> print(forest)
+CFFEForest(n_trees=100, max_depth=4, min_leaf=20)
+  Fitted: No
+
+# Get/set parameters
+>>> forest.get_params()
+{'n_trees': 100, 'max_depth': 4, 'min_leaf': 20, ...}
+>>> forest.set_params(n_trees=200)
+
+# Score with known true effects (useful for simulations)
+>>> score = forest.score(X, Y, D, unit, time, tau_true=tau_true)
+```
 
 ### Variance Functions
 
@@ -154,11 +178,11 @@ See [docs/methods.md](docs/methods.md) for full methodology.
 If you use this package in your research, please cite:
 
 ```bibtex
-@article{aytug2026causalfe,
+@article{aytug2025causalfe,
   title={causalfe: Causal Forests with Fixed Effects in Python},
   author={Aytug, Harry},
   journal={arXiv preprint arXiv:2601.10555},
-  year={2026},
+  year={2025},
   doi={10.48550/arXiv.2601.10555}
 }
 ```
@@ -181,7 +205,7 @@ Alternatively, to cite the software directly:
 @software{causalfe,
   title={causalfe: Causal Forests with Fixed Effects in Python},
   author={Aytug, Harry},
-  year={2026},
+  year={2025},
   url={https://github.com/haytug/causalfe}
 }
 ```
