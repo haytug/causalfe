@@ -102,6 +102,47 @@ class TestEconometricValidation:
         # Variance should be small (homogeneous effect)
         assert tau_hat.std() < 1.0, f"Std = {tau_hat.std():.3f}, expected small"
 
+    def test_ate_unbiased_and_recentering(self):
+        """
+        The unbiased ate() should recover a constant τ with low bias, and
+        recentering should make predict(X).mean() equal ate(). The raw
+        (un-recentered) forest mean is attenuated toward zero.
+        """
+        true_tau = 2.0
+        X, Y, D, unit, time, tau_true = dgp_did_homogeneous(
+            N=100, T=5, tau=true_tau, seed=42
+        )
+
+        model = CFFEForest(n_trees=50, max_depth=5, min_leaf=15, seed=42)
+        model.fit(X, Y, D, unit, time)
+
+        # ate() is the unbiased within-FE estimate
+        assert np.abs(model.ate() - true_tau) < 0.5, (
+            f"ate() bias = {np.abs(model.ate() - true_tau):.3f}, expected < 0.5"
+        )
+
+        # Recentering makes the full-sample CATE mean equal ate()
+        tau_hat = model.predict(X)
+        assert np.abs(tau_hat.mean() - model.ate()) < 1e-8, (
+            "predict(X).mean() should equal ate() after recentering"
+        )
+
+        # Raw predictions are attenuated (biased toward zero) relative to ate()
+        tau_raw = model.predict(X, raw=True)
+        assert tau_raw.mean() <= tau_hat.mean() + 1e-8, (
+            "raw forest mean should be attenuated relative to recentered mean"
+        )
+
+    def test_recenter_disabled_matches_raw(self):
+        """With recenter=False, predict() returns the raw forest average."""
+        X, Y, D, unit, time, _ = dgp_did_homogeneous(N=80, T=5, tau=1.5, seed=7)
+        model = CFFEForest(n_trees=40, max_depth=4, min_leaf=15,
+                           seed=7, recenter=False)
+        model.fit(X, Y, D, unit, time)
+        np.testing.assert_allclose(
+            model.predict(X), model.predict(X, raw=True), rtol=0, atol=1e-12
+        )
+
     def test_heterogeneous_did_correlation(self):
         """
         Heterogeneous DiD: τ̂ correlates with true τ.

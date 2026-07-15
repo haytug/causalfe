@@ -9,6 +9,8 @@ Main estimator class that aggregates honest causal trees with:
 
 import numpy as np
 from causalfe.forest.tree import CFFETree
+from causalfe.forest.residuals import fe_residualize
+from causalfe.forest.splitting import estimate_tau
 
 
 class CFFEForest:
@@ -29,6 +31,15 @@ class CFFEForest:
         Fraction of units to subsample for each tree.
     seed : int or None
         Random seed for reproducibility.
+    recenter : bool
+        If True (default), recenter the forest's CATE predictions so that
+        their treated-sample mean equals the unbiased full-sample within-FE
+        ATE. Honest causal-forest leaf estimates carry a finite-sample
+        attenuation bias that grows with tree depth (node-level FE
+        residualization on small leaves shrinks the treatment signal toward
+        zero). Recentering removes this level bias while preserving the
+        heterogeneity (relative ranking) the forest discovers, analogous to
+        reporting the ATE separately from CATEs in the GRF framework.
     """
 
     def __init__(
@@ -39,6 +50,7 @@ class CFFEForest:
         honest: bool = True,
         subsample_ratio: float = 0.5,
         seed: int = None,
+        recenter: bool = True,
     ):
         self.n_trees = n_trees
         self.max_depth = max_depth
@@ -46,6 +58,7 @@ class CFFEForest:
         self.honest = honest
         self.subsample_ratio = subsample_ratio
         self.seed = seed
+        self.recenter = recenter
         self.trees = []
         self._rng = None
         self._is_fitted = False
@@ -53,6 +66,11 @@ class CFFEForest:
         self._n_samples = None
         self._n_features = None
         self._n_units = None
+        # Unbiased full-sample within-FE ATE and recentering offset
+        self._ate = None
+        self._recenter_offset = 0.0
+        self._train_X = None
+        self._train_D = None
 
     def __repr__(self):
         """Return a string representation similar to scikit-learn estimators."""
@@ -100,6 +118,7 @@ class CFFEForest:
             "honest": self.honest,
             "subsample_ratio": self.subsample_ratio,
             "seed": self.seed,
+            "recenter": self.recenter,
         }
 
     def set_params(self, **params):
@@ -193,22 +212,35 @@ class CFFEForest:
             self.trees.append(tree)
 
         self._is_fitted = True
+
+        # --- Unbiased ATE and recentering ---------------------------------
+        # The forest's leaf-level CATE estimates carry a finite-sample
+        # attenuation bias (node-level FE residualization on small honest
+        # leaves shrinks D-variance and pulls tau toward zero). We therefore
+        # estimate the ATE from the full-sample within-FE estimator, which is
+        # numerically identical to a two-way fixed-effects (within) regression
+        # and is unbiased for the ATE, and use it to recenter the CATEs.
+        Y_tilde, D_tilde = fe_residualize(Y, D, unit, time, iters=10)
+        self._ate = float(estimate_tau(Y_tilde, D_tilde))
+
+        # Store training data for computing the recentering offset lazily
+        self._train_X = X
+        self._train_D = D
+
+        if self.recenter:
+            raw_tau = self._raw_predict(X)
+            # Recenter so the full-sample mean of predicted CATEs equals the
+            # unbiased within-FE ATE. This makes predict(X).mean() == ate()
+            # by construction, so downstream code that averages the CATEs
+            # recovers the unbiased ATE.
+            self._recenter_offset = self._ate - raw_tau.mean()
+        else:
+            self._recenter_offset = 0.0
+
         return self
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        """
-        Predict CATE for each observation.
-
-        Parameters
-        ----------
-        X : array of shape (n, p)
-            Covariates.
-
-        Returns
-        -------
-        tau_hat : array of shape (n,)
-            Estimated CATEs.
-        """
+    def _raw_predict(self, X: np.ndarray) -> np.ndarray:
+        """Raw (un-recentered) forest CATE predictions: mean over trees."""
         X = np.asarray(X)
         n = X.shape[0]
         tau_sum = np.zeros(n)
@@ -217,6 +249,48 @@ class CFFEForest:
             tau_sum += tree.predict(X)
 
         return tau_sum / len(self.trees)
+
+    def predict(self, X: np.ndarray, raw: bool = False) -> np.ndarray:
+        """
+        Predict CATE for each observation.
+
+        Parameters
+        ----------
+        X : array of shape (n, p)
+            Covariates.
+        raw : bool
+            If True, return the raw forest average without ATE recentering.
+            If False (default) and the forest was fitted with recenter=True,
+            the predictions are shifted so their treated-sample mean equals
+            the unbiased full-sample within-FE ATE (see the class docstring).
+
+        Returns
+        -------
+        tau_hat : array of shape (n,)
+            Estimated CATEs.
+        """
+        tau_hat = self._raw_predict(X)
+        if raw or not self.recenter:
+            return tau_hat
+        return tau_hat + self._recenter_offset
+
+    def ate(self) -> float:
+        """
+        Return the unbiased average treatment effect.
+
+        This is the full-sample within-fixed-effects estimator
+        (numerically identical to a two-way FE regression coefficient),
+        which is unbiased for the ATE, unlike the mean of the forest's
+        attenuated leaf-level CATE estimates.
+
+        Returns
+        -------
+        ate : float
+            Estimated average treatment effect (in the units of Y).
+        """
+        if not self._is_fitted:
+            raise RuntimeError("Forest must be fitted before calling ate().")
+        return self._ate
 
 
     def predict_with_variance(self, X: np.ndarray, method: str = "half_sample") -> tuple:
@@ -246,23 +320,27 @@ class CFFEForest:
         for b, tree in enumerate(self.trees):
             preds[b] = tree.predict(X)
 
-        # Mean prediction
-        tau_hat = preds.mean(axis=0)
+        # Mean prediction (raw scale for variance; recentered at return).
+        # Recentering is a constant additive offset, so it does not affect
+        # the variance of the CATE estimates.
+        tau_raw = preds.mean(axis=0)
+        tau_hat = tau_raw + self._recenter_offset if self.recenter else tau_raw
 
         if method == "half_sample":
             # Half-sample variance (GRF-style)
             mid = B // 2
             tau_b1 = preds[:mid].mean(axis=0)
             tau_b2 = preds[mid : 2 * mid].mean(axis=0)
-            var_hat = 0.5 * ((tau_b1 - tau_hat) ** 2 + (tau_b2 - tau_hat) ** 2)
+            var_hat = 0.5 * ((tau_b1 - tau_raw) ** 2 + (tau_b2 - tau_raw) ** 2)
             
         elif method == "jackknife":
-            # Jackknife variance
+            # Jackknife variance (computed on the raw scale; the recentering
+            # offset cancels in the deviations)
             preds_sum = preds.sum(axis=0)
             var_hat = np.zeros(n)
             for b in range(B):
                 tau_loo = (preds_sum - preds[b]) / (B - 1)
-                var_hat += (tau_loo - tau_hat) ** 2
+                var_hat += (tau_loo - tau_raw) ** 2
             var_hat *= (B - 1) / B
             
         elif method == "infinitesimal":
