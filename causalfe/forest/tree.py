@@ -23,6 +23,7 @@ class TreeNode:
         # Split info (for internal nodes)
         self.feature = None
         self.threshold = None
+        self.gain = 0.0  # heterogeneity gain from the split (for feature importance)
         self.left = None
         self.right = None
 
@@ -41,10 +42,12 @@ class CFFETree:
         If True, use sample splitting for honest estimation.
     """
 
-    def __init__(self, max_depth: int = 5, min_leaf: int = 20, honest: bool = True):
+    def __init__(self, max_depth: int = 5, min_leaf: int = 20, honest: bool = True,
+                 seed: int = None):
         self.max_depth = max_depth
         self.min_leaf = min_leaf
         self.honest = honest
+        self.seed = seed
         self.root = None
 
     def fit(
@@ -73,9 +76,12 @@ class CFFETree:
         indices = np.arange(n)
 
         if self.honest:
-            # Cluster-aware split: split by units, not observations
+            # Cluster-aware split: split by units, not observations.
+            # Use a local seeded RNG so predictions are reproducible; relying on
+            # the global np.random state made predict() non-deterministic.
+            rng = np.random.default_rng(self.seed)
             unique_units = np.unique(unit)
-            np.random.shuffle(unique_units)
+            unique_units = rng.permutation(unique_units)
             half = len(unique_units) // 2
 
             struct_units = set(unique_units[:half])
@@ -149,6 +155,7 @@ class CFFETree:
         node.is_leaf = False
         node.feature = best_feat
         node.threshold = best_thresh
+        node.gain = best_score
 
         node.left = self._build_tree(
             X[left_mask],
@@ -254,3 +261,24 @@ class CFFETree:
             return self._get_leaf_id(node.left, x, 2 * current_id + 1)
         else:
             return self._get_leaf_id(node.right, x, 2 * current_id + 2)
+
+    def feature_importances(self, n_features: int) -> np.ndarray:
+        """
+        Sample-weighted heterogeneity-gain importance for each feature.
+
+        Each internal node contributes (n_samples * gain) to the feature it
+        split on, where gain is the tau-heterogeneity split score. This mirrors
+        the impurity-decrease importance used by regression forests, but the
+        "impurity" here is treatment-effect heterogeneity. Not normalized.
+        """
+        imp = np.zeros(n_features)
+
+        def _walk(node):
+            if node is None or node.is_leaf:
+                return
+            imp[node.feature] += node.n_samples * node.gain
+            _walk(node.left)
+            _walk(node.right)
+
+        _walk(self.root)
+        return imp

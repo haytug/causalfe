@@ -202,11 +202,14 @@ class CFFEForest:
             mask = np.isin(unit, sampled_units)
             idx = np.where(mask)[0]
 
-            # Build tree on subsample
+            # Build tree on subsample. Draw a per-tree seed from the forest's
+            # seeded RNG so the honest split inside each tree is reproducible.
+            tree_seed = int(self._rng.integers(0, 2**31 - 1))
             tree = CFFETree(
                 max_depth=self.max_depth,
                 min_leaf=self.min_leaf,
                 honest=self.honest,
+                seed=tree_seed,
             )
             tree.fit(X[idx], Y[idx], D[idx], unit[idx], time[idx])
             self.trees.append(tree)
@@ -292,6 +295,41 @@ class CFFEForest:
             raise RuntimeError("Forest must be fitted before calling ate().")
         return self._ate
 
+    def feature_importances(self, normalize: bool = True) -> np.ndarray:
+        """
+        Feature importances aggregated across trees.
+
+        Each tree contributes sample-weighted tau-heterogeneity gain per
+        feature; the forest importance is the average across trees. Because
+        the criterion is treatment-effect heterogeneity (not outcome MSE),
+        this measures which covariates the forest uses to split on
+        *effect* variation.
+
+        Parameters
+        ----------
+        normalize : bool
+            If True (default), importances sum to 1.
+
+        Returns
+        -------
+        importances : array of shape (n_features,)
+
+        Notes
+        -----
+        Like all impurity/gain-based importances, this favors
+        high-cardinality continuous features; interpret as a descriptive
+        summary of split usage, not a causal decomposition.
+        """
+        if not self._is_fitted:
+            raise RuntimeError("Forest must be fitted before feature_importances().")
+        p = self._n_features
+        total = np.zeros(p)
+        for tree in self.trees:
+            total += tree.feature_importances(p)
+        total /= max(len(self.trees), 1)
+        if normalize and total.sum() > 0:
+            total = total / total.sum()
+        return total
 
     def predict_with_variance(self, X: np.ndarray, method: str = "half_sample") -> tuple:
         """
