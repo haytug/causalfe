@@ -17,6 +17,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration with pandas DataFrames
 - Parallel tree fitting
 
+## [0.3.2] - 2026-07-19
+
+### Added
+- **`CFFEForest.ate_se()`** — the pair-clustered standard error of the ATE. It
+  is the cluster-robust (clustering on `unit`) standard error of the within
+  fixed-effects estimator, equivalent to the pair-clustered SE of the treatment
+  coefficient in a two-way fixed-effects OLS regression.
+- **`CFFEForest.ate_interval(alpha=0.05)`** — a confidence interval for the ATE
+  built from that clustered standard error.
+
+### Fixed
+- **Understated ATE uncertainty.** Prior to 0.3.2 there was no built-in ATE
+  standard error, and downstream code that estimated one from the variance of
+  the fitted CATEs (e.g. `cluster_robust_variance(cate, unit)`) treated the
+  estimated leaf effects as data and produced intervals several times too
+  narrow. `ate_se()`/`ate_interval()` compute the correct clustered variance of
+  the within-FE estimator, so the reported ATE interval now matches the
+  pair-clustered two-way fixed-effects OLS benchmark rather than the (spuriously
+  tight) spread of the forest's own predictions.
+
+### Notes
+- Point estimates (`ate()`, `predict()`) are unchanged; this release only adds
+  and corrects the ATE's inference. No API breakage.
+
 ## [0.3.1] - 2026-07-18
 
 ### Fixed
