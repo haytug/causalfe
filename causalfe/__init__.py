@@ -27,7 +27,7 @@ from .inference import (
     confidence_interval,
 )
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = [
     # Main estimator

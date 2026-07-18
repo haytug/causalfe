@@ -68,6 +68,9 @@ class CFFEForest:
         self._n_units = None
         # Unbiased full-sample within-FE ATE and recentering offset
         self._ate = None
+        self._ate_se = None
+        self._ate_var = None
+        self._n_clusters = None
         self._recenter_offset = 0.0
         self._train_X = None
         self._train_D = None
@@ -226,6 +229,37 @@ class CFFEForest:
         Y_tilde, D_tilde = fe_residualize(Y, D, unit, time, iters=10)
         self._ate = float(estimate_tau(Y_tilde, D_tilde))
 
+        # Pair-clustered standard error for the ATE. The within-FE estimator
+        # tau = sum(D~ Y~)/sum(D~^2) is the coefficient on the residualized
+        # treatment; its cluster-robust variance (clustering on `unit`) is the
+        # standard sandwich estimator applied to that one-regressor regression:
+        #   Var = (sum D~^2)^{-1} [ sum_g (D~_g' e_g)^2 ] (sum D~^2)^{-1},
+        # where e = Y~ - tau * D~ and g indexes clusters (pairs). This matches
+        # the pair-clustered SE of a two-way fixed-effects OLS regression, so
+        # the reported ATE interval is comparable to that transparent benchmark
+        # rather than to the (much narrower) variance of the fitted CATEs.
+        resid = Y_tilde - self._ate * D_tilde
+        denom = float(np.sum(D_tilde ** 2))
+        if denom > 1e-12:
+            meat = 0.0
+            for g in np.unique(unit):
+                mask = unit == g
+                sg = float(np.sum(D_tilde[mask] * resid[mask]))
+                meat += sg * sg
+            n_clusters = len(np.unique(unit))
+            # small-sample (cluster) correction, as in standard clustered OLS
+            k = 1
+            n = len(Y)
+            corr = (n_clusters / (n_clusters - 1)) * ((n - 1) / (n - k)) \
+                if n_clusters > 1 else 1.0
+            self._ate_var = corr * meat / (denom ** 2)
+            self._ate_se = float(np.sqrt(self._ate_var))
+            self._n_clusters = n_clusters
+        else:
+            self._ate_var = np.nan
+            self._ate_se = np.nan
+            self._n_clusters = len(np.unique(unit))
+
         # Store training data for computing the recentering offset lazily
         self._train_X = X
         self._train_D = D
@@ -294,6 +328,40 @@ class CFFEForest:
         if not self._is_fitted:
             raise RuntimeError("Forest must be fitted before calling ate().")
         return self._ate
+
+    def ate_se(self) -> float:
+        """
+        Pair-clustered standard error of the ATE.
+
+        This is the cluster-robust (clustering on ``unit``) standard error of
+        the within-fixed-effects estimator, equivalent to the pair-clustered SE
+        of the treatment coefficient in a two-way fixed-effects OLS regression.
+        It is the appropriate uncertainty for the ATE and is much wider than the
+        variance of the forest's fitted CATEs, which understates uncertainty
+        because it treats the estimated leaf effects as data.
+        """
+        if not self._is_fitted:
+            raise RuntimeError("Forest must be fitted before calling ate_se().")
+        return self._ate_se
+
+    def ate_interval(self, alpha: float = 0.05) -> tuple:
+        """
+        Confidence interval for the ATE using the pair-clustered standard error.
+
+        Parameters
+        ----------
+        alpha : float
+            Significance level (default 0.05 for a 95% interval).
+
+        Returns
+        -------
+        (lower, upper) : tuple of float
+        """
+        from scipy import stats
+        if not self._is_fitted:
+            raise RuntimeError("Forest must be fitted before calling ate_interval().")
+        z = stats.norm.ppf(1 - alpha / 2)
+        return (self._ate - z * self._ate_se, self._ate + z * self._ate_se)
 
     def feature_importances(self, normalize: bool = True) -> np.ndarray:
         """
