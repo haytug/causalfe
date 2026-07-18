@@ -17,6 +17,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration with pandas DataFrames
 - Parallel tree fitting
 
+## [0.3.1] - 2026-07-18
+
+### Fixed
+- **Reproducibility of `predict()`.** The honest-split sample partition in each
+  tree used the global NumPy random state (`np.random.shuffle`) instead of the
+  forest's seeded generator. As a result, `predict()` (and any CATE-derived
+  output) varied from run to run even with a fixed `seed`, while `fit()` and
+  `ate()` were already deterministic. Each tree now draws its own seed from the
+  forest's seeded RNG and shuffles with a local `np.random.default_rng`, so
+  fitted trees, CATE predictions, and everything downstream are fully
+  reproducible across runs. `ate()` is unchanged.
+
+### Added
+- **`CFFEForest.feature_importances(normalize=True)`.** Returns
+  heterogeneity-gain feature importances aggregated across trees: each internal
+  node contributes `n_samples * gain` (the tau-heterogeneity split score) to the
+  feature it split on, averaged over trees and optionally normalized to sum to
+  one. Because the splitting criterion is treatment-effect heterogeneity (not
+  outcome MSE), this measures which covariates drive *effect* variation. Like
+  all gain-based importances it favors high-cardinality continuous features and
+  should be read as a descriptive summary, not a causal decomposition.
+
+### Notes
+- No API breakage. Results computed with a fixed `seed` under 0.3.0 may differ
+  slightly from 0.3.1 because the honest split is now seeded correctly; 0.3.1
+  values are the reproducible ones.
+
 ## [0.3.0] - 2026-07-15
 
 ### Fixed
